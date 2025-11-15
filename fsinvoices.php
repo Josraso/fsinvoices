@@ -196,14 +196,149 @@ class FSInvoices extends Module
             $fs_pass = Configuration::get('FSINVOICES_DB_PASS');
 
             $conn = new mysqli($fs_host, $fs_user, $fs_pass, $fs_name);
-            
+
             if ($conn->connect_error) {
                 return false;
             }
-            
+
             $conn->close();
             return true;
         } catch (Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Hook que se ejecuta cuando se genera un PDF de factura
+     */
+    public function hookActionPDFInvoiceRender($params)
+    {
+        error_log('[FSInvoices] hookActionPDFInvoiceRender ejecutado');
+
+        if (isset($params['order'])) {
+            $id_order = (int)$params['order']->id;
+            error_log('[FSInvoices] Hook - ID Order: ' . $id_order);
+
+            if ($this->redirectToFSInvoice($id_order)) {
+                error_log('[FSInvoices] Redirigido desde hook');
+                exit;
+            }
+        }
+    }
+
+    /**
+     * Hook alternativo para interceptar la generación de PDFs
+     */
+    public function hookDisplayPDFInvoice($params)
+    {
+        error_log('[FSInvoices] hookDisplayPDFInvoice ejecutado');
+
+        if (isset($params['object']) && isset($params['object']->id)) {
+            $id_order = (int)$params['object']->id;
+            error_log('[FSInvoices] Hook Display - ID Order: ' . $id_order);
+
+            if ($this->redirectToFSInvoice($id_order)) {
+                error_log('[FSInvoices] Redirigido desde hook display');
+                exit;
+            }
+        }
+    }
+
+    /**
+     * Redirige a la factura de FacturaScripts
+     */
+    private function redirectToFSInvoice($id_order)
+    {
+        error_log('[FSInvoices] redirectToFSInvoice - ID Order: ' . $id_order);
+
+        // Obtener configuración
+        $fs_host = Configuration::get('FSINVOICES_DB_HOST');
+        $fs_name = Configuration::get('FSINVOICES_DB_NAME');
+        $fs_user = Configuration::get('FSINVOICES_DB_USER');
+        $fs_pass = Configuration::get('FSINVOICES_DB_PASS');
+        $fs_url = Configuration::get('FSINVOICES_URL');
+        $fs_prefix = Configuration::get('FSINVOICES_TABLE_PREFIX');
+
+        error_log('[FSInvoices] Config - Host: ' . $fs_host . ', DB: ' . $fs_name . ', URL: ' . $fs_url);
+
+        if (empty($fs_host) || empty($fs_name) || empty($fs_user) || empty($fs_url)) {
+            error_log('[FSInvoices] Configuración incompleta');
+            return false;
+        }
+
+        try {
+            // Conectar a FacturaScripts
+            $fs_conn = new mysqli($fs_host, $fs_user, $fs_pass, $fs_name);
+
+            if ($fs_conn->connect_error) {
+                error_log('[FSInvoices] Error conexión BD: ' . $fs_conn->connect_error);
+                return false;
+            }
+
+            $fs_conn->set_charset('utf8');
+
+            // Buscar el idalbaran en ps_orders
+            $table_ps_orders = $fs_prefix . 'ps_orders';
+            $query = "SELECT idalbaran FROM `{$table_ps_orders}` WHERE id = " . (int)$id_order;
+            error_log('[FSInvoices] Query ps_orders: ' . $query);
+
+            $result = $fs_conn->query($query);
+
+            if (!$result || $result->num_rows == 0) {
+                error_log('[FSInvoices] No se encontró el pedido en ps_orders');
+                $fs_conn->close();
+                return false;
+            }
+
+            $row = $result->fetch_assoc();
+            $idalbaran = (int)$row['idalbaran'];
+            error_log('[FSInvoices] ID Albaran: ' . $idalbaran);
+
+            if (!$idalbaran) {
+                error_log('[FSInvoices] idalbaran es 0');
+                $fs_conn->close();
+                return false;
+            }
+
+            // Buscar la factura asociada al albarán
+            $table_facturas = $fs_prefix . 'facturascli';
+            $table_albaranes = $fs_prefix . 'albaranescli';
+
+            $query = "SELECT f.idfactura
+                      FROM `{$table_albaranes}` a
+                      INNER JOIN `{$table_facturas}` f ON a.idfactura = f.idfactura
+                      WHERE a.idalbaran = " . (int)$idalbaran;
+
+            error_log('[FSInvoices] Query factura: ' . $query);
+            $result = $fs_conn->query($query);
+
+            if (!$result || $result->num_rows == 0) {
+                error_log('[FSInvoices] No se encontró factura para el albarán');
+                $fs_conn->close();
+                return false;
+            }
+
+            $row = $result->fetch_assoc();
+            $idfactura = (int)$row['idfactura'];
+            error_log('[FSInvoices] ID Factura: ' . $idfactura);
+
+            $fs_conn->close();
+
+            if (!$idfactura) {
+                error_log('[FSInvoices] idfactura es 0');
+                return false;
+            }
+
+            // Redirigir a FacturaScripts para servir el PDF
+            $pdf_url = rtrim($fs_url, '/') . '/index.php?page=plantillas_pdf&factura=TRUE&id=' . $idfactura;
+            error_log('[FSInvoices] Redirigiendo a: ' . $pdf_url);
+
+            // Redirigir al PDF de FacturaScripts
+            header('Location: ' . $pdf_url);
+            return true;
+
+        } catch (Exception $e) {
+            error_log('[FSInvoices] Exception: ' . $e->getMessage());
             return false;
         }
     }
