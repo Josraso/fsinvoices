@@ -32,57 +32,13 @@ class FSInvoices extends Module
 
     public function install()
     {
-        // Instalar overrides
-        if (!$this->installOverrides()) {
-            return false;
-        }
-
         return parent::install()
             && $this->registerHook('actionPDFInvoiceRender')
             && $this->registerHook('displayPDFInvoice');
     }
 
-    private function installOverrides()
-    {
-        try {
-            // Copiar overrides de admin
-            $source_admin = dirname(__FILE__) . '/override/controllers/admin/AdminPdfController.php';
-            $dest_admin = _PS_ROOT_DIR_ . '/override/controllers/admin/AdminPdfController.php';
-
-            if (file_exists($source_admin)) {
-                if (!is_dir(dirname($dest_admin))) {
-                    mkdir(dirname($dest_admin), 0755, true);
-                }
-                copy($source_admin, $dest_admin);
-            }
-
-            // Copiar overrides de front
-            $source_front = dirname(__FILE__) . '/override/controllers/front/PdfInvoiceController.php';
-            $dest_front = _PS_ROOT_DIR_ . '/override/controllers/front/PdfInvoiceController.php';
-
-            if (file_exists($source_front)) {
-                if (!is_dir(dirname($dest_front))) {
-                    mkdir(dirname($dest_front), 0755, true);
-                }
-                copy($source_front, $dest_front);
-            }
-
-            // Eliminar cache de clases para que los overrides se carguen
-            if (file_exists(_PS_ROOT_DIR_ . '/cache/class_index.php')) {
-                unlink(_PS_ROOT_DIR_ . '/cache/class_index.php');
-            }
-
-            return true;
-        } catch (Exception $e) {
-            return false;
-        }
-    }
-
     public function uninstall()
     {
-        // Eliminar overrides
-        $this->uninstallOverrides();
-
         return Configuration::deleteByName('FSINVOICES_DB_HOST')
             && Configuration::deleteByName('FSINVOICES_DB_NAME')
             && Configuration::deleteByName('FSINVOICES_DB_USER')
@@ -91,32 +47,6 @@ class FSInvoices extends Module
             && Configuration::deleteByName('FSINVOICES_TABLE_PREFIX')
             && Configuration::deleteByName('FSINVOICES_URL')
             && parent::uninstall();
-    }
-
-    private function uninstallOverrides()
-    {
-        try {
-            // Eliminar override de admin
-            $override_admin = _PS_ROOT_DIR_ . '/override/controllers/admin/AdminPdfController.php';
-            if (file_exists($override_admin)) {
-                unlink($override_admin);
-            }
-
-            // Eliminar override de front
-            $override_front = _PS_ROOT_DIR_ . '/override/controllers/front/PdfInvoiceController.php';
-            if (file_exists($override_front)) {
-                unlink($override_front);
-            }
-
-            // Eliminar cache de clases
-            if (file_exists(_PS_ROOT_DIR_ . '/cache/class_index.php')) {
-                unlink(_PS_ROOT_DIR_ . '/cache/class_index.php');
-            }
-
-            return true;
-        } catch (Exception $e) {
-            return false;
-        }
     }
 
     public function getContent()
