@@ -8,11 +8,16 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
 {
     protected function processGenerateInvoicePDF()
     {
+        // Log para depurar
+        error_log('[FSInvoices] PdfInvoiceController::processGenerateInvoicePDF() llamado');
+
         // Intentar generar factura desde FacturaScripts
         if ($this->generateFSInvoice()) {
+            error_log('[FSInvoices] Redirigido a FacturaScripts');
             return; // Ya se ha redirigido a FacturaScripts
         }
 
+        error_log('[FSInvoices] No se redirigió, usando PrestaShop original');
         // Si no hay factura de FacturaScripts, usar el método original
         parent::processGenerateInvoicePDF();
     }
