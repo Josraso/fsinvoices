@@ -27,25 +27,96 @@ class FSInvoices extends Module
 
         $this->displayName = $this->l('FacturaScripts Invoices');
         $this->description = $this->l('Sustituye las facturas de PrestaShop por las de FacturaScripts');
-        $this->confirmUninstall = $this->l('¿Está seguro de que desea desinstalar este módulo?');
+        $this->confirmUninstall = $this->l('ï¿½Estï¿½ seguro de que desea desinstalar este mï¿½dulo?');
     }
 
     public function install()
     {
+        // Instalar overrides
+        if (!$this->installOverrides()) {
+            return false;
+        }
+
         return parent::install()
             && $this->registerHook('actionPDFInvoiceRender')
             && $this->registerHook('displayPDFInvoice');
     }
 
+    private function installOverrides()
+    {
+        try {
+            // Copiar overrides de admin
+            $source_admin = dirname(__FILE__) . '/override/controllers/admin/AdminPdfController.php';
+            $dest_admin = _PS_ROOT_DIR_ . '/override/controllers/admin/AdminPdfController.php';
+
+            if (file_exists($source_admin)) {
+                if (!is_dir(dirname($dest_admin))) {
+                    mkdir(dirname($dest_admin), 0755, true);
+                }
+                copy($source_admin, $dest_admin);
+            }
+
+            // Copiar overrides de front
+            $source_front = dirname(__FILE__) . '/override/controllers/front/PdfInvoiceController.php';
+            $dest_front = _PS_ROOT_DIR_ . '/override/controllers/front/PdfInvoiceController.php';
+
+            if (file_exists($source_front)) {
+                if (!is_dir(dirname($dest_front))) {
+                    mkdir(dirname($dest_front), 0755, true);
+                }
+                copy($source_front, $dest_front);
+            }
+
+            // Eliminar cache de clases para que los overrides se carguen
+            if (file_exists(_PS_ROOT_DIR_ . '/cache/class_index.php')) {
+                unlink(_PS_ROOT_DIR_ . '/cache/class_index.php');
+            }
+
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+
     public function uninstall()
     {
+        // Eliminar overrides
+        $this->uninstallOverrides();
+
         return Configuration::deleteByName('FSINVOICES_DB_HOST')
             && Configuration::deleteByName('FSINVOICES_DB_NAME')
             && Configuration::deleteByName('FSINVOICES_DB_USER')
             && Configuration::deleteByName('FSINVOICES_DB_PASS')
             && Configuration::deleteByName('FSINVOICES_PATH')
             && Configuration::deleteByName('FSINVOICES_TABLE_PREFIX')
+            && Configuration::deleteByName('FSINVOICES_URL')
             && parent::uninstall();
+    }
+
+    private function uninstallOverrides()
+    {
+        try {
+            // Eliminar override de admin
+            $override_admin = _PS_ROOT_DIR_ . '/override/controllers/admin/AdminPdfController.php';
+            if (file_exists($override_admin)) {
+                unlink($override_admin);
+            }
+
+            // Eliminar override de front
+            $override_front = _PS_ROOT_DIR_ . '/override/controllers/front/PdfInvoiceController.php';
+            if (file_exists($override_front)) {
+                unlink($override_front);
+            }
+
+            // Eliminar cache de clases
+            if (file_exists(_PS_ROOT_DIR_ . '/cache/class_index.php')) {
+                unlink(_PS_ROOT_DIR_ . '/cache/class_index.php');
+            }
+
+            return true;
+        } catch (Exception $e) {
+            return false;
+        }
     }
 
     public function getContent()
@@ -59,6 +130,7 @@ class FSInvoices extends Module
             $fs_pass = strval(Tools::getValue('FSINVOICES_DB_PASS'));
             $fs_path = strval(Tools::getValue('FSINVOICES_PATH'));
             $fs_prefix = strval(Tools::getValue('FSINVOICES_TABLE_PREFIX'));
+            $fs_url = strval(Tools::getValue('FSINVOICES_URL'));
 
             Configuration::updateValue('FSINVOICES_DB_HOST', $fs_host);
             Configuration::updateValue('FSINVOICES_DB_NAME', $fs_name);
@@ -66,14 +138,15 @@ class FSInvoices extends Module
             Configuration::updateValue('FSINVOICES_DB_PASS', $fs_pass);
             Configuration::updateValue('FSINVOICES_PATH', $fs_path);
             Configuration::updateValue('FSINVOICES_TABLE_PREFIX', $fs_prefix);
+            Configuration::updateValue('FSINVOICES_URL', $fs_url);
 
-            $output .= $this->displayConfirmation($this->l('Configuración actualizada correctamente'));
+            $output .= $this->displayConfirmation($this->l('Configuraciï¿½n actualizada correctamente'));
             
-            // Probar conexión
+            // Probar conexiï¿½n
             if ($this->testFSConnection()) {
-                $output .= $this->displayConfirmation($this->l('Conexión con FacturaScripts: OK'));
+                $output .= $this->displayConfirmation($this->l('Conexiï¿½n con FacturaScripts: OK'));
             } else {
-                $output .= $this->displayError($this->l('No se pudo conectar a FacturaScripts. Verifique la configuración.'));
+                $output .= $this->displayError($this->l('No se pudo conectar a FacturaScripts. Verifique la configuraciï¿½n.'));
             }
         }
 
@@ -86,7 +159,7 @@ class FSInvoices extends Module
 
         $fields_form[0]['form'] = array(
             'legend' => array(
-                'title' => $this->l('Configuración de FacturaScripts'),
+                'title' => $this->l('Configuraciï¿½n de FacturaScripts'),
             ),
             'input' => array(
                 array(
@@ -114,14 +187,14 @@ class FSInvoices extends Module
                 ),
                 array(
                     'type' => 'password',
-                    'label' => $this->l('Contraseña de Base de Datos'),
+                    'label' => $this->l('Contraseï¿½a de Base de Datos'),
                     'name' => 'FSINVOICES_DB_PASS',
                     'size' => 40,
                     'required' => true
                 ),
                 array(
                     'type' => 'text',
-                    'label' => $this->l('Ruta física de FacturaScripts'),
+                    'label' => $this->l('Ruta fï¿½sica de FacturaScripts'),
                     'name' => 'FSINVOICES_PATH',
                     'size' => 80,
                     'required' => true,
@@ -133,7 +206,15 @@ class FSInvoices extends Module
                     'name' => 'FSINVOICES_TABLE_PREFIX',
                     'size' => 20,
                     'required' => false,
-                    'desc' => $this->l('Dejar vacío si no usa prefijo')
+                    'desc' => $this->l('Dejar vacï¿½o si no usa prefijo')
+                ),
+                array(
+                    'type' => 'text',
+                    'label' => $this->l('URL de FacturaScripts'),
+                    'name' => 'FSINVOICES_URL',
+                    'size' => 80,
+                    'required' => true,
+                    'desc' => $this->l('Ejemplo: http://localhost/facturascripts o https://midominio.com/facturascripts')
                 ),
             ),
             'submit' => array(
@@ -171,6 +252,7 @@ class FSInvoices extends Module
         $helper->fields_value['FSINVOICES_DB_PASS'] = Configuration::get('FSINVOICES_DB_PASS');
         $helper->fields_value['FSINVOICES_PATH'] = Configuration::get('FSINVOICES_PATH');
         $helper->fields_value['FSINVOICES_TABLE_PREFIX'] = Configuration::get('FSINVOICES_TABLE_PREFIX');
+        $helper->fields_value['FSINVOICES_URL'] = Configuration::get('FSINVOICES_URL');
 
         return $helper->generateForm($fields_form);
     }

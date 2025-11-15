@@ -11,7 +11,7 @@ class AdminPdfController extends AdminPdfControllerCore
         // Solo interceptamos si es una factura
         if (Tools::getValue('submitAction') == 'generateInvoicePDF') {
             if ($this->generateFSInvoice()) {
-                return; // Ya se ha generado y servido
+                return; // Ya se ha redirigido a FacturaScripts
             }
         }
 
@@ -30,10 +30,10 @@ class AdminPdfController extends AdminPdfControllerCore
         $fs_name = Configuration::get('FSINVOICES_DB_NAME');
         $fs_user = Configuration::get('FSINVOICES_DB_USER');
         $fs_pass = Configuration::get('FSINVOICES_DB_PASS');
-        $fs_path = Configuration::get('FSINVOICES_PATH');
+        $fs_url = Configuration::get('FSINVOICES_URL');
         $fs_prefix = Configuration::get('FSINVOICES_TABLE_PREFIX');
 
-        if (empty($fs_host) || empty($fs_name) || empty($fs_user) || empty($fs_path)) {
+        if (empty($fs_host) || empty($fs_name) || empty($fs_user) || empty($fs_url)) {
             return false;
         }
 
@@ -46,7 +46,7 @@ class AdminPdfController extends AdminPdfControllerCore
         try {
             // Conectar a FacturaScripts
             $fs_conn = new mysqli($fs_host, $fs_user, $fs_pass, $fs_name);
-            
+
             if ($fs_conn->connect_error) {
                 return false;
             }
@@ -55,7 +55,7 @@ class AdminPdfController extends AdminPdfControllerCore
 
             // Buscar el idalbaran en ps_orders
             $table_ps_orders = $fs_prefix . 'ps_orders';
-            $query = "SELECT idalbaran FROM `{$table_ps_orders}` WHERE id = {$id_order}";
+            $query = "SELECT idalbaran FROM `{$table_ps_orders}` WHERE id = " . (int)$id_order;
             $result = $fs_conn->query($query);
 
             if (!$result || $result->num_rows == 0) {
@@ -74,12 +74,12 @@ class AdminPdfController extends AdminPdfControllerCore
             // Buscar la factura asociada al albarán
             $table_facturas = $fs_prefix . 'facturascli';
             $table_albaranes = $fs_prefix . 'albaranescli';
-            
-            $query = "SELECT f.idfactura 
+
+            $query = "SELECT f.idfactura
                       FROM `{$table_albaranes}` a
                       INNER JOIN `{$table_facturas}` f ON a.idfactura = f.idfactura
-                      WHERE a.idalbaran = {$idalbaran}";
-            
+                      WHERE a.idalbaran = " . (int)$idalbaran;
+
             $result = $fs_conn->query($query);
 
             if (!$result || $result->num_rows == 0) {
@@ -92,13 +92,16 @@ class AdminPdfController extends AdminPdfControllerCore
 
             $fs_conn->close();
 
-            // Cargar el generador de PDF
-            require_once(_PS_MODULE_DIR_.'fsinvoices/classes/FSInvoiceGenerator.php');
-            
-            $generator = new FSInvoiceGenerator($fs_host, $fs_user, $fs_pass, $fs_name, $fs_path, $fs_prefix);
-            $generator->generateAndServePDF($idfactura);
+            if (!$idfactura) {
+                return false;
+            }
 
-            return true;
+            // Redirigir a FacturaScripts para servir el PDF
+            $pdf_url = rtrim($fs_url, '/') . '/index.php?page=plantillas_pdf&factura=TRUE&id=' . $idfactura;
+
+            // Redirigir al PDF de FacturaScripts
+            header('Location: ' . $pdf_url);
+            exit;
 
         } catch (Exception $e) {
             return false;
