@@ -46,6 +46,8 @@ class FSInvoices extends Module
             && Configuration::deleteByName('FSINVOICES_PATH')
             && Configuration::deleteByName('FSINVOICES_TABLE_PREFIX')
             && Configuration::deleteByName('FSINVOICES_URL')
+            && Configuration::deleteByName('FSINVOICES_FS_USER')
+            && Configuration::deleteByName('FSINVOICES_FS_PASS')
             && parent::uninstall();
     }
 
@@ -61,6 +63,8 @@ class FSInvoices extends Module
             $fs_path = strval(Tools::getValue('FSINVOICES_PATH'));
             $fs_prefix = strval(Tools::getValue('FSINVOICES_TABLE_PREFIX'));
             $fs_url = strval(Tools::getValue('FSINVOICES_URL'));
+            $fs_web_user = strval(Tools::getValue('FSINVOICES_FS_USER'));
+            $fs_web_pass = strval(Tools::getValue('FSINVOICES_FS_PASS'));
 
             Configuration::updateValue('FSINVOICES_DB_HOST', $fs_host);
             Configuration::updateValue('FSINVOICES_DB_NAME', $fs_name);
@@ -69,6 +73,8 @@ class FSInvoices extends Module
             Configuration::updateValue('FSINVOICES_PATH', $fs_path);
             Configuration::updateValue('FSINVOICES_TABLE_PREFIX', $fs_prefix);
             Configuration::updateValue('FSINVOICES_URL', $fs_url);
+            Configuration::updateValue('FSINVOICES_FS_USER', $fs_web_user);
+            Configuration::updateValue('FSINVOICES_FS_PASS', $fs_web_pass);
 
             $output .= $this->displayConfirmation($this->l('Configuraci�n actualizada correctamente'));
             
@@ -146,6 +152,22 @@ class FSInvoices extends Module
                     'required' => true,
                     'desc' => $this->l('Ejemplo: http://localhost/facturascripts o https://midominio.com/facturascripts')
                 ),
+                array(
+                    'type' => 'text',
+                    'label' => $this->l('Usuario de FacturaScripts'),
+                    'name' => 'FSINVOICES_FS_USER',
+                    'size' => 40,
+                    'required' => true,
+                    'desc' => $this->l('Usuario para hacer login en FacturaScripts y descargar PDFs')
+                ),
+                array(
+                    'type' => 'password',
+                    'label' => $this->l('Contraseña de FacturaScripts'),
+                    'name' => 'FSINVOICES_FS_PASS',
+                    'size' => 40,
+                    'required' => true,
+                    'desc' => $this->l('Contraseña del usuario de FacturaScripts')
+                ),
             ),
             'submit' => array(
                 'title' => $this->l('Guardar'),
@@ -183,6 +205,8 @@ class FSInvoices extends Module
         $helper->fields_value['FSINVOICES_PATH'] = Configuration::get('FSINVOICES_PATH');
         $helper->fields_value['FSINVOICES_TABLE_PREFIX'] = Configuration::get('FSINVOICES_TABLE_PREFIX');
         $helper->fields_value['FSINVOICES_URL'] = Configuration::get('FSINVOICES_URL');
+        $helper->fields_value['FSINVOICES_FS_USER'] = Configuration::get('FSINVOICES_FS_USER');
+        $helper->fields_value['FSINVOICES_FS_PASS'] = Configuration::get('FSINVOICES_FS_PASS');
 
         return $helper->generateForm($fields_form);
     }
@@ -358,12 +382,17 @@ class FSInvoices extends Module
                 return false;
             }
 
-            // Construir URL del PDF de FacturaScripts
-            $pdf_url = rtrim($fs_url, '/') . '/index.php?page=plantillas_pdf&factura=TRUE&id=' . $idfactura;
-            error_log('[FSInvoices] URL PDF: ' . $pdf_url);
+            // Obtener credenciales de login de FacturaScripts
+            $fs_web_user = Configuration::get('FSINVOICES_FS_USER');
+            $fs_web_pass = Configuration::get('FSINVOICES_FS_PASS');
 
-            // Descargar el PDF desde FacturaScripts y servirlo directamente
-            $pdf_content = @file_get_contents($pdf_url);
+            if (empty($fs_web_user) || empty($fs_web_pass)) {
+                error_log('[FSInvoices] Faltan credenciales de FacturaScripts');
+                return false;
+            }
+
+            // Descargar el PDF con autenticación
+            $pdf_content = $this->downloadAuthenticatedPDF($fs_url, $idfactura, $fs_web_user, $fs_web_pass);
 
             if ($pdf_content === false) {
                 error_log('[FSInvoices] Error al descargar el PDF desde FacturaScripts');
@@ -384,5 +413,79 @@ class FSInvoices extends Module
             error_log('[FSInvoices] Exception: ' . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Descarga un PDF de FacturaScripts con autenticación
+     */
+    private function downloadAuthenticatedPDF($fs_url, $idfactura, $username, $password)
+    {
+        $base_url = rtrim($fs_url, '/');
+
+        // Inicializar cURL con manejo de cookies
+        $cookie_file = tempnam(sys_get_temp_dir(), 'fs_cookie_');
+
+        // Paso 1: Hacer login en FacturaScripts
+        $login_url = $base_url . '/index.php';
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $login_url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'user' => $username,
+            'pass' => $password
+        ]));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_COOKIEJAR, $cookie_file);
+        curl_setopt($ch, CURLOPT_COOKIEFILE, $cookie_file);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Para desarrollo
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false); // Para desarrollo
+
+        error_log('[FSInvoices] Haciendo login en FacturaScripts...');
+        $login_response = curl_exec($ch);
+        $login_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        error_log('[FSInvoices] Login HTTP Code: ' . $login_http_code);
+
+        if ($login_response === false) {
+            error_log('[FSInvoices] Error en login cURL: ' . curl_error($ch));
+            curl_close($ch);
+            @unlink($cookie_file);
+            return false;
+        }
+
+        // Paso 2: Descargar el PDF usando la sesión autenticada
+        $pdf_url = $base_url . '/index.php?page=plantillas_pdf&factura=TRUE&id=' . $idfactura;
+        error_log('[FSInvoices] Descargando PDF desde: ' . $pdf_url);
+
+        curl_setopt($ch, CURLOPT_URL, $pdf_url);
+        curl_setopt($ch, CURLOPT_POST, false);
+        curl_setopt($ch, CURLOPT_HTTPGET, true);
+
+        $pdf_content = curl_exec($ch);
+        $pdf_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+
+        error_log('[FSInvoices] PDF HTTP Code: ' . $pdf_http_code);
+        error_log('[FSInvoices] PDF Content-Type: ' . $content_type);
+        error_log('[FSInvoices] PDF Size: ' . strlen($pdf_content) . ' bytes');
+
+        curl_close($ch);
+        @unlink($cookie_file);
+
+        // Verificar que sea un PDF válido
+        if ($pdf_content === false || $pdf_http_code != 200) {
+            error_log('[FSInvoices] Error al descargar PDF');
+            return false;
+        }
+
+        // Verificar que el contenido sea PDF (empieza con %PDF)
+        if (substr($pdf_content, 0, 4) !== '%PDF') {
+            error_log('[FSInvoices] El contenido descargado no es un PDF válido');
+            error_log('[FSInvoices] Primeros 200 caracteres: ' . substr($pdf_content, 0, 200));
+            return false;
+        }
+
+        return $pdf_content;
     }
 }
