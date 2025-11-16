@@ -270,6 +270,16 @@ class FSInvoices extends Module
     {
         error_log('[FSInvoices] redirectToFSInvoice - ID Order: ' . $id_order);
 
+        // Obtener la referencia del pedido en PrestaShop
+        $order = new Order($id_order);
+        if (!Validate::isLoadedObject($order)) {
+            error_log('[FSInvoices] Pedido no encontrado en PrestaShop');
+            return false;
+        }
+
+        $order_reference = $order->reference;
+        error_log('[FSInvoices] Order Reference: ' . $order_reference);
+
         // Obtener configuración
         $fs_host = Configuration::get('FSINVOICES_DB_HOST');
         $fs_name = Configuration::get('FSINVOICES_DB_NAME');
@@ -296,9 +306,9 @@ class FSInvoices extends Module
 
             $fs_conn->set_charset('utf8');
 
-            // Buscar el idalbaran en ps_orders
+            // Buscar el idalbaran en ps_orders usando la REFERENCIA
             $table_ps_orders = $fs_prefix . 'ps_orders';
-            $query = "SELECT idalbaran FROM `{$table_ps_orders}` WHERE id = " . (int)$id_order;
+            $query = "SELECT idalbaran FROM `{$table_ps_orders}` WHERE referencia = '" . $fs_conn->real_escape_string($order_reference) . "'";
             error_log('[FSInvoices] Query ps_orders: ' . $query);
 
             $result = $fs_conn->query($query);
