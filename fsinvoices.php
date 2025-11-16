@@ -358,12 +358,26 @@ class FSInvoices extends Module
                 return false;
             }
 
-            // Redirigir a FacturaScripts para servir el PDF
+            // Construir URL del PDF de FacturaScripts
             $pdf_url = rtrim($fs_url, '/') . '/index.php?page=plantillas_pdf&factura=TRUE&id=' . $idfactura;
-            error_log('[FSInvoices] Redirigiendo a: ' . $pdf_url);
+            error_log('[FSInvoices] URL PDF: ' . $pdf_url);
 
-            // Redirigir al PDF de FacturaScripts
-            header('Location: ' . $pdf_url);
+            // Descargar el PDF desde FacturaScripts y servirlo directamente
+            $pdf_content = @file_get_contents($pdf_url);
+
+            if ($pdf_content === false) {
+                error_log('[FSInvoices] Error al descargar el PDF desde FacturaScripts');
+                return false;
+            }
+
+            // Servir el PDF directamente sin mostrar la URL
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="factura_' . $order_reference . '.pdf"');
+            header('Content-Length: ' . strlen($pdf_content));
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            header('Pragma: public');
+
+            echo $pdf_content;
             return true;
 
         } catch (Exception $e) {
