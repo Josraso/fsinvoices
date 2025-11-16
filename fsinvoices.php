@@ -232,11 +232,10 @@ class FSInvoices extends Module
     public function hookDisplayPDFInvoice($params)
     {
         error_log('[FSInvoices] hookDisplayPDFInvoice ejecutado');
-        error_log('[FSInvoices] Params: ' . print_r($params, true));
 
         if (isset($params['object'])) {
-            error_log('[FSInvoices] Object class: ' . get_class($params['object']));
-            error_log('[FSInvoices] Object: ' . print_r($params['object'], true));
+            $class = get_class($params['object']);
+            error_log('[FSInvoices] Object class: ' . $class);
 
             // Intentar obtener el id_order correcto
             $id_order = null;
@@ -247,14 +246,14 @@ class FSInvoices extends Module
                 error_log('[FSInvoices] ID Order desde id_order: ' . $id_order);
             }
             // Si es Order directamente
-            elseif (isset($params['object']->id) && get_class($params['object']) == 'Order') {
+            elseif (isset($params['object']->id) && $class == 'Order') {
                 $id_order = (int)$params['object']->id;
                 error_log('[FSInvoices] ID Order desde Order->id: ' . $id_order);
             }
             // Fallback: usar id genérico
             elseif (isset($params['object']->id)) {
                 $id_order = (int)$params['object']->id;
-                error_log('[FSInvoices] ID Order desde id genérico: ' . $id_order);
+                error_log('[FSInvoices] ID Order desde id genérico (class=' . $class . '): ' . $id_order);
             }
 
             if ($id_order && $this->redirectToFSInvoice($id_order)) {
