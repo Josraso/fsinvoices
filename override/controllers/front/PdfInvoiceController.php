@@ -105,7 +105,8 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
             if (!$result || $result->num_rows == 0) {
                 error_log('[FSInvoices Front] No se encontró el pedido en ps_orders');
                 $fs_conn->close();
-                die('Error: El pedido no se encuentra en FacturaScripts. Por favor, verifique que el pedido haya sido importado correctamente.');
+                $this->showErrorPopup('Lo sentimos, esta factura aún no está disponible. Por favor, inténtelo más tarde.');
+                return false;
             }
 
             $row = $result->fetch_assoc();
@@ -115,7 +116,8 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
             if (!$idalbaran) {
                 error_log('[FSInvoices Front] idalbaran es 0');
                 $fs_conn->close();
-                die('Error: El pedido no tiene albarán asociado en FacturaScripts. Por favor, genere primero el albarán.');
+                $this->showErrorPopup('Lo sentimos, esta factura aún no está disponible. Por favor, inténtelo más tarde.');
+                return false;
             }
 
             // Buscar la factura asociada al albarán
@@ -133,7 +135,8 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
             if (!$result || $result->num_rows == 0) {
                 error_log('[FSInvoices Front] No se encontró factura para el albarán');
                 $fs_conn->close();
-                die('Error: El albarán no tiene factura asociada en FacturaScripts. Por favor, genere primero la factura desde el albarán.');
+                $this->showErrorPopup('Lo sentimos, esta factura aún no está disponible. Por favor, inténtelo más tarde.');
+                return false;
             }
 
             $row = $result->fetch_assoc();
@@ -152,7 +155,8 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
 
             if ($pdf_content === false) {
                 error_log('[FSInvoices Front] Error al descargar el PDF desde FacturaScripts');
-                die('Error: No se pudo descargar la factura desde FacturaScripts. Por favor, verifique las credenciales de acceso y que la factura esté generada correctamente.');
+                $this->showErrorPopup('Lo sentimos, no se pudo obtener la factura en este momento. Por favor, inténtelo más tarde.');
+                return false;
             }
 
             // Servir el PDF directamente sin mostrar la URL
@@ -242,5 +246,48 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
         }
 
         return $pdf_content;
+    }
+
+    private function showErrorPopup($message)
+    {
+        echo '<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Factura no disponible</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 0; }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .popup { background: white; padding: 30px 40px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 500px; text-align: center; animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .popup h2 { color: #e74c3c; margin: 0 0 15px 0; font-size: 24px; }
+        .popup p { color: #555; margin: 0 0 25px 0; font-size: 16px; line-height: 1.5; }
+        .popup button { background: #3498db; color: white; border: none; padding: 12px 30px; border-radius: 5px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+        .popup button:hover { background: #2980b9; }
+        .icon { font-size: 48px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <div class="overlay">
+        <div class="popup">
+            <div class="icon">⚠️</div>
+            <h2>Factura no disponible</h2>
+            <p>' . htmlspecialchars($message) . '</p>
+            <button onclick="goBack()">Volver</button>
+        </div>
+    </div>
+    <script>
+        function goBack() {
+            if (window.history.length > 1) {
+                window.history.back();
+            } else {
+                window.close();
+            }
+        }
+        setTimeout(goBack, 5000);
+    </script>
+</body>
+</html>';
+        exit;
     }
 }
