@@ -8,11 +8,11 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
 {
     public function init()
     {
-        error_log('[FSInvoices] PdfInvoiceController::init() llamado');
+        error_log('[FSInvoices Front] PdfInvoiceController::init() llamado');
 
         // Intentar generar factura desde FacturaScripts
         if ($this->generateFSInvoice()) {
-            error_log('[FSInvoices] Redirigido a FacturaScripts desde init()');
+            error_log('[FSInvoices Front] PDF servido desde init()');
             return;
         }
 
@@ -21,27 +21,46 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
 
     protected function processGenerateInvoicePDF()
     {
-        error_log('[FSInvoices] PdfInvoiceController::processGenerateInvoicePDF() llamado');
+        error_log('[FSInvoices Front] PdfInvoiceController::processGenerateInvoicePDF() llamado');
 
         // Intentar generar factura desde FacturaScripts
         if ($this->generateFSInvoice()) {
-            error_log('[FSInvoices] Redirigido a FacturaScripts desde processGenerateInvoicePDF()');
+            error_log('[FSInvoices Front] PDF servido desde processGenerateInvoicePDF()');
             return;
         }
 
-        error_log('[FSInvoices] No se redirigió, usando PrestaShop original');
+        error_log('[FSInvoices Front] No se sirvió PDF de FS, usando PrestaShop original');
         parent::processGenerateInvoicePDF();
     }
 
     private function generateFSInvoice()
     {
-        error_log('[FSInvoices] generateFSInvoice() ejecutándose...');
+        error_log('[FSInvoices Front] generateFSInvoice() ejecutándose...');
 
         // Verificar que el módulo esté activo y configurado
         if (!Module::isInstalled('fsinvoices') || !Module::isEnabled('fsinvoices')) {
-            error_log('[FSInvoices] Módulo no instalado o no activado');
+            error_log('[FSInvoices Front] Módulo no instalado o no activado');
             return false;
         }
+
+        // Obtener ID del pedido
+        $id_order = (int)Tools::getValue('id_order');
+        error_log('[FSInvoices Front] ID Order: ' . $id_order);
+
+        if (!$id_order) {
+            error_log('[FSInvoices Front] No hay id_order');
+            return false;
+        }
+
+        // Obtener la referencia del pedido en PrestaShop
+        $order = new Order($id_order);
+        if (!Validate::isLoadedObject($order)) {
+            error_log('[FSInvoices Front] Pedido no encontrado en PrestaShop');
+            return false;
+        }
+
+        $order_reference = $order->reference;
+        error_log('[FSInvoices Front] Order Reference: ' . $order_reference);
 
         // Obtener configuración
         $fs_host = Configuration::get('FSINVOICES_DB_HOST');
@@ -50,20 +69,18 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
         $fs_pass = Configuration::get('FSINVOICES_DB_PASS');
         $fs_url = Configuration::get('FSINVOICES_URL');
         $fs_prefix = Configuration::get('FSINVOICES_TABLE_PREFIX');
+        $fs_web_user = Configuration::get('FSINVOICES_FS_USER');
+        $fs_web_pass = Configuration::get('FSINVOICES_FS_PASS');
 
-        error_log('[FSInvoices] Config - Host: ' . $fs_host . ', DB: ' . $fs_name . ', URL: ' . $fs_url);
+        error_log('[FSInvoices Front] Config - Host: ' . $fs_host . ', DB: ' . $fs_name . ', URL: ' . $fs_url);
 
         if (empty($fs_host) || empty($fs_name) || empty($fs_user) || empty($fs_url)) {
-            error_log('[FSInvoices] Configuración incompleta');
+            error_log('[FSInvoices Front] Configuración incompleta');
             return false;
         }
 
-        // Obtener ID del pedido
-        $id_order = (int)Tools::getValue('id_order');
-        error_log('[FSInvoices] ID Order: ' . $id_order);
-
-        if (!$id_order) {
-            error_log('[FSInvoices] No hay id_order');
+        if (empty($fs_web_user) || empty($fs_web_pass)) {
+            error_log('[FSInvoices Front] Faltan credenciales de FacturaScripts');
             return false;
         }
 
@@ -72,33 +89,33 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
             $fs_conn = new mysqli($fs_host, $fs_user, $fs_pass, $fs_name);
 
             if ($fs_conn->connect_error) {
-                error_log('[FSInvoices] Error conexión BD: ' . $fs_conn->connect_error);
+                error_log('[FSInvoices Front] Error conexión BD: ' . $fs_conn->connect_error);
                 return false;
             }
 
             $fs_conn->set_charset('utf8');
 
-            // Buscar el idalbaran en ps_orders
+            // Buscar el idalbaran en ps_orders usando la REFERENCIA
             $table_ps_orders = $fs_prefix . 'ps_orders';
-            $query = "SELECT idalbaran FROM `{$table_ps_orders}` WHERE id = " . (int)$id_order;
-            error_log('[FSInvoices] Query ps_orders: ' . $query);
+            $query = "SELECT idalbaran FROM `{$table_ps_orders}` WHERE referencia = '" . $fs_conn->real_escape_string($order_reference) . "'";
+            error_log('[FSInvoices Front] Query ps_orders: ' . $query);
 
             $result = $fs_conn->query($query);
 
             if (!$result || $result->num_rows == 0) {
-                error_log('[FSInvoices] No se encontró el pedido en ps_orders');
+                error_log('[FSInvoices Front] No se encontró el pedido en ps_orders');
                 $fs_conn->close();
-                return false;
+                die('Error: El pedido no se encuentra en FacturaScripts. Por favor, verifique que el pedido haya sido importado correctamente.');
             }
 
             $row = $result->fetch_assoc();
             $idalbaran = (int)$row['idalbaran'];
-            error_log('[FSInvoices] ID Albaran: ' . $idalbaran);
+            error_log('[FSInvoices Front] ID Albaran: ' . $idalbaran);
 
             if (!$idalbaran) {
-                error_log('[FSInvoices] idalbaran es 0');
+                error_log('[FSInvoices Front] idalbaran es 0');
                 $fs_conn->close();
-                return false;
+                die('Error: El pedido no tiene albarán asociado en FacturaScripts. Por favor, genere primero el albarán.');
             }
 
             // Buscar la factura asociada al albarán
@@ -110,37 +127,120 @@ class PdfInvoiceController extends PdfInvoiceControllerCore
                       INNER JOIN `{$table_facturas}` f ON a.idfactura = f.idfactura
                       WHERE a.idalbaran = " . (int)$idalbaran;
 
-            error_log('[FSInvoices] Query factura: ' . $query);
+            error_log('[FSInvoices Front] Query factura: ' . $query);
             $result = $fs_conn->query($query);
 
             if (!$result || $result->num_rows == 0) {
-                error_log('[FSInvoices] No se encontró factura para el albarán');
+                error_log('[FSInvoices Front] No se encontró factura para el albarán');
                 $fs_conn->close();
-                return false;
+                die('Error: El albarán no tiene factura asociada en FacturaScripts. Por favor, genere primero la factura desde el albarán.');
             }
 
             $row = $result->fetch_assoc();
             $idfactura = (int)$row['idfactura'];
-            error_log('[FSInvoices] ID Factura: ' . $idfactura);
+            error_log('[FSInvoices Front] ID Factura: ' . $idfactura);
 
             $fs_conn->close();
 
             if (!$idfactura) {
-                error_log('[FSInvoices] idfactura es 0');
+                error_log('[FSInvoices Front] idfactura es 0');
                 return false;
             }
 
-            // Redirigir a FacturaScripts para servir el PDF
-            $pdf_url = rtrim($fs_url, '/') . '/index.php?page=plantillas_pdf&factura=TRUE&id=' . $idfactura;
-            error_log('[FSInvoices] Redirigiendo a: ' . $pdf_url);
+            // Descargar el PDF con autenticación
+            $pdf_content = $this->downloadAuthenticatedPDF($fs_url, $idfactura, $fs_web_user, $fs_web_pass);
 
-            // Redirigir al PDF de FacturaScripts
-            header('Location: ' . $pdf_url);
+            if ($pdf_content === false) {
+                error_log('[FSInvoices Front] Error al descargar el PDF desde FacturaScripts');
+                die('Error: No se pudo descargar la factura desde FacturaScripts. Por favor, verifique las credenciales de acceso y que la factura esté generada correctamente.');
+            }
+
+            // Servir el PDF directamente sin mostrar la URL
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="factura_' . $order_reference . '.pdf"');
+            header('Content-Length: ' . strlen($pdf_content));
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            header('Pragma: public');
+
+            echo $pdf_content;
             exit;
 
         } catch (Exception $e) {
-            error_log('[FSInvoices] Exception: ' . $e->getMessage());
+            error_log('[FSInvoices Front] Exception: ' . $e->getMessage());
             return false;
         }
+    }
+
+    private function downloadAuthenticatedPDF($fs_url, $idfactura, $username, $password)
+    {
+        $base_url = rtrim($fs_url, '/');
+
+        // Inicializar cURL con manejo de cookies
+        $cookie_file = tempnam(sys_get_temp_dir(), 'fs_cookie_');
+
+        // Paso 1: Hacer login en FacturaScripts 2019
+        $login_url = $base_url . '/index.php';
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $login_url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'fsnick' => $username,
+            'fspass' => $password,
+            'login' => 'TRUE'
+        ]));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_COOKIEJAR, $cookie_file);
+        curl_setopt($ch, CURLOPT_COOKIEFILE, $cookie_file);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
+        error_log('[FSInvoices Front] Haciendo login en FacturaScripts con usuario: ' . $username);
+        $login_response = curl_exec($ch);
+        $login_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        error_log('[FSInvoices Front] Login HTTP Code: ' . $login_http_code);
+        error_log('[FSInvoices Front] Login response (primeros 500 chars): ' . substr($login_response, 0, 500));
+
+        if ($login_response === false) {
+            error_log('[FSInvoices Front] Error en login cURL: ' . curl_error($ch));
+            curl_close($ch);
+            @unlink($cookie_file);
+            return false;
+        }
+
+        // Paso 2: Descargar el PDF usando la sesión autenticada
+        $pdf_url = $base_url . '/index.php?page=plantillas_pdf&factura=TRUE&id=' . $idfactura;
+        error_log('[FSInvoices Front] Descargando PDF desde: ' . $pdf_url);
+
+        curl_setopt($ch, CURLOPT_URL, $pdf_url);
+        curl_setopt($ch, CURLOPT_POST, false);
+        curl_setopt($ch, CURLOPT_HTTPGET, true);
+
+        $pdf_content = curl_exec($ch);
+        $pdf_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+
+        error_log('[FSInvoices Front] PDF HTTP Code: ' . $pdf_http_code);
+        error_log('[FSInvoices Front] PDF Content-Type: ' . $content_type);
+        error_log('[FSInvoices Front] PDF Size: ' . strlen($pdf_content) . ' bytes');
+
+        curl_close($ch);
+        @unlink($cookie_file);
+
+        // Verificar que sea un PDF válido
+        if ($pdf_content === false || $pdf_http_code != 200) {
+            error_log('[FSInvoices Front] Error al descargar PDF');
+            return false;
+        }
+
+        // Verificar que el contenido sea PDF (empieza con %PDF)
+        if (substr($pdf_content, 0, 4) !== '%PDF') {
+            error_log('[FSInvoices Front] El contenido descargado no es un PDF válido');
+            error_log('[FSInvoices Front] Primeros 500 caracteres: ' . substr($pdf_content, 0, 500));
+            return false;
+        }
+
+        return $pdf_content;
     }
 }

@@ -28,8 +28,25 @@ class AdminPdfController extends AdminPdfControllerCore
             return false;
         }
 
-        // Obtener ID del pedido
+        // Obtener ID del pedido (puede venir de diferentes lugares)
         $id_order = (int)Tools::getValue('id_order');
+
+        // Si no viene en id_order, intentar con id
+        if (!$id_order) {
+            $id_order = (int)Tools::getValue('id');
+        }
+
+        // Si tampoco, intentar obtenerlo de id_order_invoice
+        if (!$id_order) {
+            $id_invoice = (int)Tools::getValue('id_order_invoice');
+            if ($id_invoice) {
+                $order_invoice = new OrderInvoice($id_invoice);
+                if (Validate::isLoadedObject($order_invoice)) {
+                    $id_order = (int)$order_invoice->id_order;
+                }
+            }
+        }
+
         error_log('[FSInvoices Admin] ID Order: ' . $id_order);
 
         if (!$id_order) {
