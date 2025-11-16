@@ -426,16 +426,15 @@ class FSInvoices extends Module
         $cookie_file = tempnam(sys_get_temp_dir(), 'fs_cookie_');
 
         // Paso 1: Hacer login en FacturaScripts 2019
-        // FacturaScripts 2019 usa los campos: fsnick y fspass
+        // FacturaScripts 2019 usa los campos: user y password
         $login_url = $base_url . '/index.php';
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $login_url);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-            'fsnick' => $username,
-            'fspass' => $password,
-            'login' => 'TRUE'
+            'user' => $username,
+            'password' => $password
         ]));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
