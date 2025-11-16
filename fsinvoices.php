@@ -359,7 +359,7 @@ class FSInvoices extends Module
             $table_facturas = $fs_prefix . 'facturascli';
             $table_albaranes = $fs_prefix . 'albaranescli';
 
-            $query = "SELECT f.idfactura
+            $query = "SELECT f.idfactura, f.codigo
                       FROM `{$table_albaranes}` a
                       INNER JOIN `{$table_facturas}` f ON a.idfactura = f.idfactura
                       WHERE a.idalbaran = " . (int)$idalbaran;
@@ -376,7 +376,8 @@ class FSInvoices extends Module
 
             $row = $result->fetch_assoc();
             $idfactura = (int)$row['idfactura'];
-            error_log('[FSInvoices] ID Factura: ' . $idfactura);
+            $codigo_factura = $row['codigo'];
+            error_log('[FSInvoices] ID Factura: ' . $idfactura . ', Código: ' . $codigo_factura);
 
             $fs_conn->close();
 
@@ -403,8 +404,8 @@ class FSInvoices extends Module
                 return false;
             }
 
-            // Servir el PDF con página de descarga visual
-            $this->servePDFWithFeedback($pdf_content, 'factura_' . $order_reference . '.pdf');
+            // Servir el PDF con página de descarga visual usando el código de FacturaScripts
+            $this->servePDFWithFeedback($pdf_content, 'factura_' . $codigo_factura . '.pdf');
             return true;
 
         } catch (Exception $e) {

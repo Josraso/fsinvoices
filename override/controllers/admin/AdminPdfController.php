@@ -126,7 +126,7 @@ class AdminPdfController extends AdminPdfControllerCore
             $table_facturas = $fs_prefix . 'facturascli';
             $table_albaranes = $fs_prefix . 'albaranescli';
 
-            $query = "SELECT f.idfactura
+            $query = "SELECT f.idfactura, f.codigo
                       FROM `{$table_albaranes}` a
                       INNER JOIN `{$table_facturas}` f ON a.idfactura = f.idfactura
                       WHERE a.idalbaran = " . (int)$idalbaran;
@@ -143,7 +143,8 @@ class AdminPdfController extends AdminPdfControllerCore
 
             $row = $result->fetch_assoc();
             $idfactura = (int)$row['idfactura'];
-            error_log('[FSInvoices Admin] ID Factura: ' . $idfactura);
+            $codigo_factura = $row['codigo'];
+            error_log('[FSInvoices Admin] ID Factura: ' . $idfactura . ', Código: ' . $codigo_factura);
 
             $fs_conn->close();
 
@@ -161,8 +162,8 @@ class AdminPdfController extends AdminPdfControllerCore
                 return false;
             }
 
-            // Servir el PDF con página de descarga visual
-            $this->servePDFWithFeedback($pdf_content, 'factura_' . $order_reference . '.pdf');
+            // Servir el PDF con página de descarga visual usando el código de FacturaScripts
+            $this->servePDFWithFeedback($pdf_content, 'factura_' . $codigo_factura . '.pdf');
             exit;
 
         } catch (Exception $e) {
