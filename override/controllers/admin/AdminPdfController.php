@@ -161,14 +161,8 @@ class AdminPdfController extends AdminPdfControllerCore
                 return false;
             }
 
-            // Servir el PDF directamente sin mostrar la URL
-            header('Content-Type: application/pdf');
-            header('Content-Disposition: attachment; filename="factura_' . $order_reference . '.pdf"');
-            header('Content-Length: ' . strlen($pdf_content));
-            header('Cache-Control: private, max-age=0, must-revalidate');
-            header('Pragma: public');
-
-            echo $pdf_content;
+            // Servir el PDF con página de descarga visual
+            $this->servePDFWithFeedback($pdf_content, 'factura_' . $order_reference . '.pdf');
             exit;
 
         } catch (Exception $e) {
@@ -248,6 +242,91 @@ class AdminPdfController extends AdminPdfControllerCore
         }
 
         return $pdf_content;
+    }
+
+    private function servePDFWithFeedback($pdf_content, $filename)
+    {
+        $pdf_base64 = base64_encode($pdf_content);
+
+        echo '<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Descargando factura</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); margin: 0; padding: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); max-width: 400px; text-align: center; animation: slideIn 0.4s ease; }
+        @keyframes slideIn { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .icon { font-size: 64px; margin-bottom: 20px; animation: pulse 1.5s ease infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        h2 { color: #333; margin: 0 0 15px 0; font-size: 24px; }
+        p { color: #666; margin: 0 0 25px 0; font-size: 16px; line-height: 1.5; }
+        .status { padding: 12px 20px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; margin: 20px 0; font-weight: bold; display: none; }
+        .status.show { display: block; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        button { background: #667eea; color: white; border: none; padding: 12px 30px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: background 0.3s; display: none; }
+        button:hover { background: #5568d3; }
+        button.show { display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon" id="icon">📄</div>
+        <h2 id="title">Preparando factura</h2>
+        <p id="message">Por favor, espera un momento...</p>
+        <div class="spinner" id="spinner"></div>
+        <div class="status" id="status"></div>
+        <button onclick="goBack()" id="backBtn">Volver</button>
+    </div>
+    <script>
+        const pdfData = "' . $pdf_base64 . '";
+        const filename = "' . htmlspecialchars($filename) . '";
+        function base64ToBlob(base64, type = "application/pdf") {
+            const binStr = atob(base64);
+            const len = binStr.length;
+            const arr = new Uint8Array(len);
+            for (let i = 0; i < len; i++) { arr[i] = binStr.charCodeAt(i); }
+            return new Blob([arr], { type: type });
+        }
+        function downloadPDF() {
+            try {
+                const blob = base64ToBlob(pdfData);
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                showSuccess();
+            } catch (error) { showError(); }
+        }
+        function showSuccess() {
+            document.getElementById("icon").textContent = "✅";
+            document.getElementById("title").textContent = "¡Factura descargada!";
+            document.getElementById("message").textContent = "La factura se ha descargado correctamente.";
+            document.getElementById("spinner").style.display = "none";
+            document.getElementById("status").textContent = "Descarga completada";
+            document.getElementById("status").classList.add("show");
+            document.getElementById("backBtn").classList.add("show");
+            setTimeout(goBack, 3000);
+        }
+        function showError() {
+            document.getElementById("icon").textContent = "⚠️";
+            document.getElementById("title").textContent = "Error al descargar";
+            document.getElementById("message").textContent = "Ocurrió un error. Por favor, inténtalo de nuevo.";
+            document.getElementById("spinner").style.display = "none";
+            document.getElementById("backBtn").classList.add("show");
+        }
+        function goBack() { window.history.back(); }
+        setTimeout(downloadPDF, 500);
+    </script>
+</body>
+</html>';
+        exit;
     }
 
     private function showAdminError($message)
