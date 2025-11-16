@@ -340,7 +340,7 @@ class FSInvoices extends Module
             if (!$result || $result->num_rows == 0) {
                 error_log('[FSInvoices] No se encontró el pedido en ps_orders');
                 $fs_conn->close();
-                return false;
+                die('Error: El pedido no se encuentra en FacturaScripts. Por favor, verifique que el pedido haya sido importado correctamente.');
             }
 
             $row = $result->fetch_assoc();
@@ -350,7 +350,7 @@ class FSInvoices extends Module
             if (!$idalbaran) {
                 error_log('[FSInvoices] idalbaran es 0');
                 $fs_conn->close();
-                return false;
+                die('Error: El pedido no tiene albarán asociado en FacturaScripts. Por favor, genere primero el albarán.');
             }
 
             // Buscar la factura asociada al albarán
@@ -368,7 +368,7 @@ class FSInvoices extends Module
             if (!$result || $result->num_rows == 0) {
                 error_log('[FSInvoices] No se encontró factura para el albarán');
                 $fs_conn->close();
-                return false;
+                die('Error: El albarán no tiene factura asociada en FacturaScripts. Por favor, genere primero la factura desde el albarán.');
             }
 
             $row = $result->fetch_assoc();
@@ -396,7 +396,7 @@ class FSInvoices extends Module
 
             if ($pdf_content === false) {
                 error_log('[FSInvoices] Error al descargar el PDF desde FacturaScripts');
-                return false;
+                die('Error: No se pudo descargar la factura desde FacturaScripts. Por favor, verifique las credenciales de acceso y que la factura esté generada correctamente.');
             }
 
             // Servir el PDF directamente sin mostrar la URL
@@ -425,27 +425,30 @@ class FSInvoices extends Module
         // Inicializar cURL con manejo de cookies
         $cookie_file = tempnam(sys_get_temp_dir(), 'fs_cookie_');
 
-        // Paso 1: Hacer login en FacturaScripts
+        // Paso 1: Hacer login en FacturaScripts 2019
+        // FacturaScripts 2019 usa los campos: fsnick y fspass
         $login_url = $base_url . '/index.php';
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $login_url);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-            'user' => $username,
-            'pass' => $password
+            'fsnick' => $username,
+            'fspass' => $password,
+            'login' => 'TRUE'
         ]));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_COOKIEJAR, $cookie_file);
         curl_setopt($ch, CURLOPT_COOKIEFILE, $cookie_file);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Para desarrollo
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false); // Para desarrollo
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
-        error_log('[FSInvoices] Haciendo login en FacturaScripts...');
+        error_log('[FSInvoices] Haciendo login en FacturaScripts con usuario: ' . $username);
         $login_response = curl_exec($ch);
         $login_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         error_log('[FSInvoices] Login HTTP Code: ' . $login_http_code);
+        error_log('[FSInvoices] Login response (primeros 500 chars): ' . substr($login_response, 0, 500));
 
         if ($login_response === false) {
             error_log('[FSInvoices] Error en login cURL: ' . curl_error($ch));
@@ -482,7 +485,7 @@ class FSInvoices extends Module
         // Verificar que el contenido sea PDF (empieza con %PDF)
         if (substr($pdf_content, 0, 4) !== '%PDF') {
             error_log('[FSInvoices] El contenido descargado no es un PDF válido');
-            error_log('[FSInvoices] Primeros 200 caracteres: ' . substr($pdf_content, 0, 200));
+            error_log('[FSInvoices] Primeros 500 caracteres: ' . substr($pdf_content, 0, 500));
             return false;
         }
 
