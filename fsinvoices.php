@@ -234,57 +234,24 @@ class FSInvoices extends Module
 
     /**
      * Hook que se ejecuta cuando se genera un PDF de factura
+     * DESACTIVADO en rama de albaranes - el override AdminPdfController se encarga
      */
     public function hookActionPDFInvoiceRender($params)
     {
-        error_log('[FSInvoices] hookActionPDFInvoiceRender ejecutado');
-
-        if (isset($params['order'])) {
-            $id_order = (int)$params['order']->id;
-            error_log('[FSInvoices] Hook - ID Order: ' . $id_order);
-
-            if ($this->redirectToFSInvoice($id_order)) {
-                error_log('[FSInvoices] Redirigido desde hook');
-                exit;
-            }
-        }
+        error_log('[FSInvoices] hookActionPDFInvoiceRender - DESACTIVADO en rama albaranes');
+        // No hacer nada - dejar que el override funcione
+        return;
     }
 
     /**
      * Hook alternativo para interceptar la generación de PDFs
+     * DESACTIVADO en rama de albaranes - el override AdminPdfController se encarga
      */
     public function hookDisplayPDFInvoice($params)
     {
-        error_log('[FSInvoices] hookDisplayPDFInvoice ejecutado');
-
-        if (isset($params['object'])) {
-            $class = get_class($params['object']);
-            error_log('[FSInvoices] Object class: ' . $class);
-
-            // Intentar obtener el id_order correcto
-            $id_order = null;
-
-            // Si es OrderInvoice, tiene id_order
-            if (isset($params['object']->id_order)) {
-                $id_order = (int)$params['object']->id_order;
-                error_log('[FSInvoices] ID Order desde id_order: ' . $id_order);
-            }
-            // Si es Order directamente
-            elseif (isset($params['object']->id) && $class == 'Order') {
-                $id_order = (int)$params['object']->id;
-                error_log('[FSInvoices] ID Order desde Order->id: ' . $id_order);
-            }
-            // Fallback: usar id genérico
-            elseif (isset($params['object']->id)) {
-                $id_order = (int)$params['object']->id;
-                error_log('[FSInvoices] ID Order desde id genérico (class=' . $class . '): ' . $id_order);
-            }
-
-            if ($id_order && $this->redirectToFSInvoice($id_order)) {
-                error_log('[FSInvoices] Redirigido desde hook display');
-                exit;
-            }
-        }
+        error_log('[FSInvoices] hookDisplayPDFInvoice - DESACTIVADO en rama albaranes');
+        // No hacer nada - dejar que el override funcione
+        return;
     }
 
     /**
